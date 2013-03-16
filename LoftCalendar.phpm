@@ -1,9 +1,7 @@
 <?php
 /**
  * @file
- * Defines a calendar Class
- *
- * Version 1.1
+ * Defines LoftCalendar
  */
 
 /**
@@ -527,99 +525,5 @@ class LoftCalendar implements LoftCalendarInterface {
     $new->calendar = array($year_month => $new->calendar[$year_month]);
     $new->adjust();
     return $new;
-  }
-}
-
-/**
- * Class OvaChartCalendar
- */
-class OvaChartCalendar extends LoftCalendar implements LoftCalendarInterface {
-
-  protected $account, $cycle;
-
-  public function __construct($readings, $cycle, $account) {
-    ova_chart_sort_readings($readings);
-    $first_reading = reset($readings);
-    $start_date = ova_chart_get_reading_date_object($first_reading);
-    $first_day_of_week = ova_chart_user_pref('cal_fday', $account, OVA_CHART_DEFAULT_CAL_FDAY);
-
-    // duration is the total CD to display - the earliest cycle day + 1
-    $duration = ova_chart_user_pref('cal_cd', $account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY);
-    $earliest_cycle_day = _ova_chart_get_node_field_value($first_reading, 'field_r_cycle_day', 2);
-    $duration -= $earliest_cycle_day;
-    $duration += 1;
-
-    parent::__construct($start_date, $duration, $first_day_of_week, 0, 0);
-
-    $this->cycle = $cycle;
-    $this->account = $account;
-
-    // Drupalize the header
-
-    $this->weekdays = date_week_days_abbr(TRUE);
-
-    // Add all the readings
-    foreach ($readings as $reading) {
-      $date = ova_chart_get_reading_date_object($reading);
-      $this->add($date, (object) array(
-        'date' => $date,
-        'node' => $reading,
-      ));
-    }
-  }
-
-  /**
-   * Return the calendar array
-   */
-  public function get() {
-    if (!$this->status) {
-      return array('error');
-    }
-
-    // Adjust for any data that was added
-    $this->adjust();
-
-    // Go through and convert this to a renderable array
-    $calendar = $this->calendar;
-    foreach (element_children($calendar) as $year_month) {
-      foreach (element_children($calendar[$year_month]) as $day_key) {
-        $child = $calendar[$year_month][$day_key];
-        if (!$calendar[$year_month][$day_key]['#has_event']) {
-          $date = new DateObject($year_month . '-' . $day_key);
-          $calendar[$year_month][$day_key][0] = array(
-            'calendar' => array(
-              '#min_cycle_day' => NULL,
-              '#max_cycle_day' => ova_chart_user_pref('cal_cd', $this->account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY),
-            ),
-            'calendar_day' => array(
-              '#date' => $date,
-              '#weekday' => $date->format('w'),
-              '#node' => NULL,
-            ),
-            'cycle' => $this->cycle,
-          );
-        }
-        else {
-          foreach(element_children($calendar[$year_month][$day_key]) as $event_key) {
-            $event = $calendar[$year_month][$day_key][$event_key];
-            if (!empty($event->node)) {
-              $calendar[$year_month][$day_key][$event_key] = array(
-                'calendar' => array(
-                  '#min_cycle_day' => _ova_chart_get_node_field_value($event->node, 'field_r_cycle_day'),
-                  '#max_cycle_day' => ova_chart_user_pref('cal_cd', $this->account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY),
-                ),
-                'calendar_day' => array(
-                  '#date' => $event->date,
-                  '#weekday' => $event->date->format('w'),
-                  '#node' => $event->node,
-                ),
-                'cycle' => $this->cycle,
-              );
-            }
-          }
-        }
-      }
-    }
-    return $calendar;
   }
 }
