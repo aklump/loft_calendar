@@ -1,0 +1,625 @@
+<?php
+/**
+ * @file
+ * Defines a calendar Class
+ *
+ * Version 1.1
+ */
+
+/**
+ * Interface LoftCalendarInterface
+ */
+interface LoftCalendarInterface {
+
+  /**
+   * Set the start date
+   *
+   * @param string or date object $start_date
+   *   When creating a month calendar with duration = 0, you may send Y-m, e.g.
+       2012-11. The following example creates a calendar for 11/2012 by
+       autocalculating the duration.
+     @code
+      $calendar = new LoftCalendar('2012-11', 0);
+     @endcode
+
+     @return $this
+   *
+   */
+  public function setStartDate($start_date);
+
+  /**
+   * Setter & validator for duration of calendar
+   *
+   * @param int $duration
+   *
+   * @return $this
+   */
+  public function setDuration($duration);
+
+  /**
+   * Set the first day of the week for the calendar
+   *
+   * @param int $first_day_of_week
+   *   Expecting 0-6
+   *
+   * @return $this
+   */
+  public function setFirstDayOfWeek($first_day_of_week);
+
+  /**
+   * Return the first day of the week for the calendar
+   *
+   * @return int
+   */
+  public function getFirstDayOfWeek();
+
+  /**
+   * Reorders weekdays to match the first day of the week.
+   *
+   * @return array
+   *   An array of weekdays reordered to match the first day of the week.
+   */
+  public function getHeader();
+
+  /**
+   * Add day (and an optional event)
+   *
+   * @param datetime or array $date
+   * - array: as returned by date_parse()
+   * @param mixed $event
+   * @param array $properties
+   *   This array will override anything already set; you would send something
+       like array('#extra' => TRUE); be careful since this OVERRIDES
+   *
+   * @return $this
+   */
+  public function add($date, $event = NULL, $properties = array());
+
+  /**
+   * Fill the calendar with an event; all days get the event
+   *
+   * @param mixed $event
+   * @param array $properties
+   *   This array will override anything already set; you would send something
+       like array('#extra' => TRUE); be careful since this OVERRIDES
+   * @param bool $extra
+   *   Defaults to FALSE, if true then extra cells also will get the event
+   *
+   * @return $this
+   */
+  public function fill($event, $properties = array(), $extra = FALSE);
+
+  /**
+   * Shift a calendar to adjust for first day of week
+   *
+   * @param int $first_day_of_week
+   *   Optional, will set objects's first day if provided. Refer to date('w');
+       sun = 0
+   *
+   * @return $this
+   */
+  public function adjust($first_day_of_week);
+
+  /**
+   * Return the calendar array
+   *
+   * @return array
+   *   This is a multidimensial array representing a calendar of events.
+   *   The elements at the top level represent each month; with keys that
+       represent the year and month, e.g. 2013-03. So if a calendar spans three
+       months, then there will be three array elements.
+
+       Each month array is an array representing the days in that month, keyed
+       by the day of the date. Each value is an array representing the events
+       for that day.
+
+       Each day array contains the following keys:
+       - #extra: bool.  Will be true if this was added to fill out a week
+       - #has_event.  Will be true if the day contains events
+       - 0, 1, 2, etc.  Each array representing an event added by $this->add()
+   */
+  public function get();
+
+  /**
+   * Return a new calendar object filtered to a month
+   *
+   * @param string $year_month
+   *   E.g. 2012-1; must be a key in $this->calendar
+   *
+   * @return LoftCalendar
+   *   A new calendar object filtered to this month only; OR if the key is
+       invalid the original calendar for chaining;
+   */
+  public function filter($year_month);
+}
+
+/*
+ * Class LoftCalendar
+ *
+ * Requires PHP 5.3+
+ */
+class LoftCalendar implements LoftCalendarInterface {
+
+  protected $start_date, $duration, $calendar, $status;
+
+  protected $first_day_of_week = 0;
+
+  protected $weekdays = array(
+    0 => 'Sunday',
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+  );
+
+  /**
+   * constructor
+   *
+   * To create a one month calendar for December 2012:
+   * @code
+   *   $cal = new LoftCalendar('2012-12');
+   * @endcode
+   *
+   * To create a 14 day calendar starting 12/3/2012
+   * @code
+   *   $cal = new LoftCalendar('2012-12-03', 14);
+   * @endcode   *
+   *
+   * @param string OR datetime object $start_date
+   * @param int $duration
+   *   Total number of days to build the calendar; note that this will be filled
+       with blank days as needed to complete months. IF DURATION IS 0 then the
+       duration will be calculated for the number of days in the month of start
+       date.
+     @param int $first_day_of_week
+       Optional defaults to 0: 0 = sun; 0-6
+   *
+   * @return NULL
+   */
+  public function __construct($start_date, $duration = 0, $first_day_of_week = 0, $prefill = 1, $postfill = 1) {
+    $this->status = TRUE;
+    $this->setStartDate($start_date);
+    $this->setDuration($duration);
+    $this->setFirstDayOfWeek($first_day_of_week);
+    $this->initialize($prefill, $postfill);
+  }
+
+  public function setStartDate($start_date) {
+    if ((is_string($start_date) && !($start_date = new DateTime($start_date))) ||
+        !is_a($start_date, 'dateTime')) {
+      $this->status = FALSE;
+    }
+    $this->start_date = $start_date;
+    return $this;
+  }
+
+  public function setDuration($duration) {
+    if (!is_numeric($duration)) {
+      $this->status = FALSE;
+    }
+    elseif ($duration == 0) {
+      if (empty($this->start_date) ||
+          !($duration = date_format($this->start_date, 't'))) {
+        $this->status = FALSE;
+      }
+    }
+    $this->duration = $duration;
+    return $this;
+  }
+
+  public function setFirstDayOfWeek($first_day_of_week) {
+    if (!is_numeric($first_day_of_week) ||
+        $first_day_of_week < 0 ||
+        $first_day_of_week > 6) {
+      $this->status = FALSE;
+    }
+    else {
+      $this->first_day_of_week = $first_day_of_week;
+    }
+    return $this;
+  }
+
+  public function getFirstDayOfWeek() {
+    return $this->first_day_of_week;
+  }
+
+  /**
+   * Return an array filtered by children
+   *
+   * @param $array
+   *
+   * @return array
+   *   All keys beginning with # are removed
+   */
+  protected function children($array) {
+    foreach (array_keys($array) as $key) {
+      if (substr($key, 0, 1) == '#') {
+        unset($array[$key]);
+      }
+    }
+    return $array;
+  }
+
+  /**
+   * Build a blank calendar for a schedule
+   *
+   * @param int $pre_fill
+   *   0: none
+   *   1: prefill to the month start
+   * @param int $post_fill
+   *   0: none
+   *   1: postfill to the month end
+   *
+   * @return array
+   */
+  protected function initialize($pre_fill, $post_fill) {
+    if (!$this->status) {
+      return $this;
+    }
+    $this->calendar = array();
+    $start = date_format($this->start_date, 'c');
+    $parsed = date_parse($start);
+    $current_day = 1;
+    while ($current_day <= $this->duration) {
+      $this->add($parsed);
+      ++$current_day;
+      $this->increment($parsed);
+    }
+    $month_keys = array_keys($this->children($this->calendar));
+
+    if ($pre_fill == 1) {
+      // prefill to the first day of month
+      $year_month = reset($month_keys);
+      $day_keys = array_keys($this->children($this->calendar[$year_month]));
+      $day = reset($day_keys);
+      $parsed = date_parse($year_month . '-' . $day);
+      while ($parsed['day'] > 1) {
+        --$parsed['day'];
+        $this->add($parsed, NULL, array('#extra' => (bool) !$pre_fill));
+      }
+
+      // Do not remove!
+      $this->sort();
+    }
+
+    if ($post_fill == 1) {
+      // postfill to last day of month
+      $year_month = end($month_keys);
+      $day_keys = array_keys($this->children($this->calendar[$year_month]));
+      $day = end($day_keys);
+      $parsed = date_parse($year_month . '-' . $day);
+      $days_in_month = date('t', strtotime($year_month . '-1'));
+      while ($parsed['day'] < $days_in_month) {
+        ++$parsed['day'];
+        $this->add($parsed, NULL, array('#extra' => (bool) !$post_fill));
+      }
+
+      // Adjust for first day of week
+      $this->adjust();
+    }
+
+    return $this;
+  }
+
+  public function getHeader() {
+    $header = $this->weekdays;
+    if ($this->first_day_of_week > 0) {
+      for ($i = 1; $i <= $this->first_day_of_week; $i++) {
+        $last = array_shift($header);
+        array_push($header, $last);
+      }
+    }
+    return $header;
+  }
+
+
+  /**
+   * Sort a calendar by date
+   */
+  protected function sort() {
+    if (empty($this->calendar)) {
+      return;
+    }
+    foreach (array_keys($this->calendar) as $key) {
+      ksort($this->calendar[$key]);
+    }
+    uksort($this->calendar, function ($a, $b) {
+      if ($a == $b) return 0;
+      $a = strtotime($a . "-1");
+      $b = strtotime($b . "-1");
+      return $a < $b ? -1 : 1;
+    });
+  }
+
+  /**
+   * Increment the $parsed array by one day
+   *
+   * @param array $parsed
+   *
+   * @return NULL
+   */
+  protected function increment(&$parsed) {
+    $timestamp = strtotime($parsed['year'] . '-' . $parsed['month'] . '-' . $parsed['day']);
+    $days_in_month = date('t', $timestamp);
+    ++$parsed['day'];
+    if ($parsed['day'] > $days_in_month) {
+      $parsed['day'] = 1;
+      ++$parsed['month'];
+    }
+    if ($parsed['month'] > 12) {
+      $parsed['month'] = 1;
+      ++$parsed['year'];
+    }
+  }
+
+  /**
+   * Increment the $parsed array by one day
+   *
+   * @param array $parsed
+   *
+   * @return NULL
+   */
+  protected function decrement(&$parsed) {
+    --$parsed['day'];
+    if ($parsed['day'] < 1) {
+      --$parsed['month'];
+    }
+    if ($parsed['month'] == 0) {
+      $parsed['month'] = 12;
+      --$parsed['year'];
+    }
+    if ($parsed['day'] < 1) {
+      $timestamp = strtotime($parsed['year'] . '-' . $parsed['month'] . '-1');
+      $parsed['day'] = date('t', $timestamp);
+    }
+  }
+
+  public function add($date, $event = NULL, $properties = array()) {
+    if (!is_array($date)) {
+      $date = date_parse($date);
+    }
+    $key = $date['year'] . '-' . $date['month'];
+    if (!array_key_exists($key, $this->calendar)) {
+      $this->calendar[$key] = array(
+        '#month' => $date['month'],
+        '#year' => $date['year'],
+      );
+    }
+    if (!array_key_exists($date['day'], $this->calendar[$key])) {
+      $this->calendar[$key][$date['day']] = array(
+        '#extra' => FALSE,
+        '#has_event' => FALSE,
+      );
+    }
+    if ($properties) {
+      $this->calendar[$key][$date['day']] = $properties + $this->calendar[$key][$date['day']];
+      ksort($this->calendar[$key][$date['day']]);
+    }
+    if ($event) {
+      $this->calendar[$key][$date['day']][] = $event;
+      $this->calendar[$key][$date['day']]['#has_event'] = TRUE;
+    }
+  }
+
+  public function fill($event, $properties = array(), $extra = FALSE) {
+    $month_keys = array_keys($this->children($this->calendar));
+    foreach ($month_keys as $year_month) {
+      $day_keys = array_keys($this->children($this->calendar[$year_month]));
+      foreach ($day_keys as $day) {
+        if ($extra ||
+            !$this->calendar[$year_month][$day]['#extra']) {
+          $this->add($year_month . '-' . $day, $event, $properties);
+        }
+      }
+    }
+    return $this;
+  }
+
+  public function adjust($first_day_of_week = NULL) {
+    if ($first_day_of_week !== NULL) {
+      $this->first_day_of_week = $first_day_of_week;
+    }
+    $this->sort();
+    $month_keys = array_keys($this->children($this->calendar));
+
+    // Adjust from left (earlier)
+    $year_month = reset($month_keys);
+    $month = $this->calendar[$year_month];
+    foreach (array_keys($this->children($month)) as $day) {
+      if (empty($parsed)) {
+        $parsed = date_parse($year_month . '-' . $day);
+        $direction = $month[$day]['#extra'] ? 1 : -1;
+      }
+      $key = $parsed['year'] . '-' . $parsed['month'];
+      $this_day_of_week = date('w', strtotime($key . '-' . $parsed['day']));
+      if ($this_day_of_week == $this->first_day_of_week) {
+        break;
+      }
+      // Add or remove until we hit the first day of week...
+      if ($direction == 1) {
+        unset($this->calendar[$year_month][$day]);
+        $this->increment($parsed);
+      }
+      else {
+        $this->decrement($parsed);
+        $this->add($parsed, NULL, array('#extra' => TRUE));
+      }
+    }
+
+    // Adjust from right (later)
+    $year_month = end($month_keys);
+    $month = $this->calendar[$year_month];
+    krsort($month);
+    $parsed = array();
+    $finished = FALSE;
+    // reset because this is in reverse order
+    $day = reset(array_keys($this->children($month)));
+    while (!$finished) {
+    //foreach (array_keys($this->children($month)) as $day) {
+      if (empty($parsed)) {
+        $parsed = date_parse($year_month . '-' . $day);
+        // Note this is opposite of above!!!
+        $direction = $month[$day]['#extra'] ? -1 : 1;
+        // If we are going to go left, we need to make sure that we have extras
+        // all the way back otherwise we need to go right
+        if ($direction == -1) {
+          $temp = $parsed;
+          for ($i = 0; $i < 6; ++$i) {
+            $this->decrement($temp);
+          }
+          $key = $temp['year'] . '-' . $temp['month'];
+          $direction = $this->calendar[$key][$temp['day']]['#extra'] ? -1 : 1;
+        }
+      }
+
+      //Removing Days
+      if ($direction == -1) {
+        // If we're going left we have to remove the current day
+        unset($this->calendar[$parsed['year'] . '-' . $parsed['month']][$parsed['day']]);
+        $this->decrement($parsed);
+      }
+      else {
+        $this->increment($parsed);
+      }
+
+      // Check if we're done
+      $this_day_of_week = date('w', strtotime($parsed['year'] . '-' . $parsed['month'] . '-' . $parsed['day']));
+      if ($this_day_of_week == $this->first_day_of_week) {
+        $finished = TRUE;
+        if ($direction == -1) {
+          unset($this->calendar[$parsed['year'] . '-' . $parsed['month']][$parsed['day']]);
+        }
+      }
+
+      if (!$finished && $direction == 1) {
+        $this->add($parsed, NULL, array('#extra' => TRUE));
+      }
+    }
+
+    // Remove any empty months
+    foreach ($this->calendar as $year_month => $data) {
+      if (!$this->children($data)) {
+        unset($this->calendar[$year_month]);
+      }
+    }
+
+    $this->sort();
+    return $this;
+  }
+
+  public function get() {
+    if (!$this->status) {
+      return array('error');
+    }
+
+    // Adjust for any data that was added
+    $this->adjust();
+    return $this->calendar;
+  }
+
+  public function filter($year_month) {
+    if (!array_key_exists($year_month, $this->calendar)) {
+      return $this;
+    }
+    $new = clone $this;
+    $new->calendar = array($year_month => $new->calendar[$year_month]);
+    $new->adjust();
+    return $new;
+  }
+}
+
+/**
+ * Class OvaChartCalendar
+ */
+class OvaChartCalendar extends LoftCalendar implements LoftCalendarInterface {
+
+  protected $account, $cycle;
+
+  public function __construct($readings, $cycle, $account) {
+    ova_chart_sort_readings($readings);
+    $first_reading = reset($readings);
+    $start_date = ova_chart_get_reading_date_object($first_reading);
+    $first_day_of_week = ova_chart_user_pref('cal_fday', $account, OVA_CHART_DEFAULT_CAL_FDAY);
+
+    // duration is the total CD to display - the earliest cycle day + 1
+    $duration = ova_chart_user_pref('cal_cd', $account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY);
+    $earliest_cycle_day = _ova_chart_get_node_field_value($first_reading, 'field_r_cycle_day', 2);
+    $duration -= $earliest_cycle_day;
+    $duration += 1;
+
+    parent::__construct($start_date, $duration, $first_day_of_week, 0, 0);
+
+    $this->cycle = $cycle;
+    $this->account = $account;
+
+    // Drupalize the header
+
+    $this->weekdays = date_week_days_abbr(TRUE);
+
+    // Add all the readings
+    foreach ($readings as $reading) {
+      $date = ova_chart_get_reading_date_object($reading);
+      $this->add($date, (object) array(
+        'date' => $date,
+        'node' => $reading,
+      ));
+    }
+  }
+
+  /**
+   * Return the calendar array
+   */
+  public function get() {
+    if (!$this->status) {
+      return array('error');
+    }
+
+    // Adjust for any data that was added
+    $this->adjust();
+
+    // Go through and convert this to a renderable array
+    $calendar = $this->calendar;
+    foreach (element_children($calendar) as $year_month) {
+      foreach (element_children($calendar[$year_month]) as $day_key) {
+        $child = $calendar[$year_month][$day_key];
+        if (!$calendar[$year_month][$day_key]['#has_event']) {
+          $date = new DateObject($year_month . '-' . $day_key);
+          $calendar[$year_month][$day_key][0] = array(
+            'calendar' => array(
+              '#min_cycle_day' => NULL,
+              '#max_cycle_day' => ova_chart_user_pref('cal_cd', $this->account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY),
+            ),
+            'calendar_day' => array(
+              '#date' => $date,
+              '#weekday' => $date->format('w'),
+              '#node' => NULL,
+            ),
+            'cycle' => $this->cycle,
+          );
+        }
+        else {
+          foreach(element_children($calendar[$year_month][$day_key]) as $event_key) {
+            $event = $calendar[$year_month][$day_key][$event_key];
+            if (!empty($event->node)) {
+              $calendar[$year_month][$day_key][$event_key] = array(
+                'calendar' => array(
+                  '#min_cycle_day' => _ova_chart_get_node_field_value($event->node, 'field_r_cycle_day'),
+                  '#max_cycle_day' => ova_chart_user_pref('cal_cd', $this->account, OVA_CHART_DEFAULT_CAL_SHOW_AT_LEAST_THROUGH_CYCLE_DAY),
+                ),
+                'calendar_day' => array(
+                  '#date' => $event->date,
+                  '#weekday' => $event->date->format('w'),
+                  '#node' => $event->node,
+                ),
+                'cycle' => $this->cycle,
+              );
+            }
+          }
+        }
+      }
+    }
+    return $calendar;
+  }
+}
