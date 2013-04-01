@@ -425,7 +425,10 @@ class LoftCalendar implements LoftCalendarInterface {
     // Adjust from left (earlier)
     $year_month = reset($month_keys);
     $month = $this->calendar[$year_month];
-    foreach (array_keys($this->children($month)) as $day) {
+    $day = reset(array_keys($this->children($month)));
+
+    // Try to add up to seven days to the left to fill out a week
+    for ($count = 0; $count < 7; ++$count) {
       if (empty($parsed)) {
         $parsed = date_parse($year_month . '-' . $day);
         $direction = $month[$day]['#extra'] ? 1 : -1;
@@ -454,8 +457,7 @@ class LoftCalendar implements LoftCalendarInterface {
     $finished = FALSE;
     // reset because this is in reverse order
     $day = reset(array_keys($this->children($month)));
-    while (!$finished) {
-    //foreach (array_keys($this->children($month)) as $day) {
+    for ($count = 0; $count < 7; ++$count) {
       if (empty($parsed)) {
         $parsed = date_parse($year_month . '-' . $day);
         // Note this is opposite of above!!!
@@ -490,9 +492,11 @@ class LoftCalendar implements LoftCalendarInterface {
           unset($this->calendar[$parsed['year'] . '-' . $parsed['month']][$parsed['day']]);
         }
       }
-
       if (!$finished && $direction == 1) {
         $this->add($parsed, NULL, array('#extra' => TRUE));
+      }
+      elseif ($finished) {
+        break;
       }
     }
 
