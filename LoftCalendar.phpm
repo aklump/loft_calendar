@@ -14,13 +14,13 @@ interface LoftCalendarInterface {
    *
    * @param string or date object $start_date
    *   When creating a month calendar with duration = 0, you may send Y-m, e.g.
-       2012-11. The following example creates a calendar for 11/2012 by
-       autocalculating the duration.
-     @code
-      $calendar = new LoftCalendar('2012-11', 0);
-     @endcode
-
-     @return $this
+   * 2012-11. The following example creates a calendar for 11/2012 by
+   * autocalculating the duration.
+   * @code
+   * $calendar = new LoftCalendar('2012-11', 0);
+   * @endcode
+   *
+   * @return $this
    *
    */
   public function setStartDate($start_date);
@@ -67,7 +67,7 @@ interface LoftCalendarInterface {
    * @param mixed $event
    * @param array $properties
    *   This array will override anything already set; you would send something
-       like array('#extra' => TRUE); be careful since this OVERRIDES
+   * like array('#extra' => TRUE); be careful since this OVERRIDES
    *
    * @return $this
    */
@@ -79,7 +79,7 @@ interface LoftCalendarInterface {
    * @param mixed $event
    * @param array $properties
    *   This array will override anything already set; you would send something
-       like array('#extra' => TRUE); be careful since this OVERRIDES
+   * like array('#extra' => TRUE); be careful since this OVERRIDES
    * @param bool $extra
    *   Defaults to FALSE, if true then extra cells also will get the event
    *
@@ -92,7 +92,7 @@ interface LoftCalendarInterface {
    *
    * @param int $first_day_of_week
    *   Optional, will set objects's first day if provided. Refer to date('w');
-       sun = 0
+   * sun = 0
    *
    * @return $this
    */
@@ -104,17 +104,17 @@ interface LoftCalendarInterface {
    * @return array
    *   This is a multidimensial array representing a calendar of events.
    *   The elements at the top level represent each month; with keys that
-       represent the year and month, e.g. 2013-03. So if a calendar spans three
-       months, then there will be three array elements.
-
-       Each month array is an array representing the days in that month, keyed
-       by the day of the date. Each value is an array representing the events
-       for that day.
-
-       Each day array contains the following keys:
-       - #extra: bool.  Will be true if this was added to fill out a week
-       - #has_event.  Will be true if the day contains events
-       - 0, 1, 2, etc.  Each array representing an event added by $this->add()
+   * represent the year and month, e.g. 2013-03. So if a calendar spans three
+   * months, then there will be three array elements.
+   *
+   * Each month array is an array representing the days in that month, keyed
+   * by the day of the date. Each value is an array representing the events
+   * for that day.
+   *
+   * Each day array contains the following keys:
+   * - #extra: bool.  Will be true if this was added to fill out a week
+   * - #has_event.  Will be true if the day contains events
+   * - 0, 1, 2, etc.  Each array representing an event added by $this->add()
    */
   public function get();
 
@@ -126,7 +126,7 @@ interface LoftCalendarInterface {
    *
    * @return LoftCalendar
    *   A new calendar object filtered to this month only; OR if the key is
-       invalid the original calendar for chaining;
+   * invalid the original calendar for chaining;
    */
   public function filter($year_month);
 }
@@ -136,6 +136,7 @@ interface LoftCalendarInterface {
  *
  * Requires PHP 5.3+
  */
+
 class LoftCalendar implements LoftCalendarInterface {
 
   protected $start_date, $duration, $calendar, $status;
@@ -156,6 +157,7 @@ class LoftCalendar implements LoftCalendarInterface {
    * constructor
    *
    * To create a one month calendar for December 2012:
+   *
    * @code
    *   $cal = new LoftCalendar('2012-12');
    * @endcode
@@ -168,11 +170,11 @@ class LoftCalendar implements LoftCalendarInterface {
    * @param string OR datetime object $start_date
    * @param int $duration
    *   Total number of days to build the calendar; note that this will be filled
-       with blank days as needed to complete months. IF DURATION IS 0 then the
-       duration will be calculated for the number of days in the month of start
-       date.
-     @param int $first_day_of_week
-       Optional defaults to 0: 0 = sun; 0-6
+   * with blank days as needed to complete months. IF DURATION IS 0 then the
+   * duration will be calculated for the number of days in the month of start
+   * date.
+   * @param int $first_day_of_week
+   * Optional defaults to 0: 0 = sun; 0-6
    *
    * @return NULL
    */
@@ -186,10 +188,11 @@ class LoftCalendar implements LoftCalendarInterface {
 
   public function setStartDate($start_date) {
     if ((is_string($start_date) && !($start_date = new DateTime($start_date))) ||
-        !is_a($start_date, 'dateTime')) {
+      !is_a($start_date, 'dateTime')) {
       $this->status = FALSE;
     }
     $this->start_date = $start_date;
+
     return $this;
   }
 
@@ -199,23 +202,25 @@ class LoftCalendar implements LoftCalendarInterface {
     }
     elseif ($duration == 0) {
       if (empty($this->start_date) ||
-          !($duration = date_format($this->start_date, 't'))) {
+        !($duration = date_format($this->start_date, 't'))) {
         $this->status = FALSE;
       }
     }
     $this->duration = $duration;
+
     return $this;
   }
 
   public function setFirstDayOfWeek($first_day_of_week) {
     if (!is_numeric($first_day_of_week) ||
-        $first_day_of_week < 0 ||
-        $first_day_of_week > 6) {
+      $first_day_of_week < 0 ||
+      $first_day_of_week > 6) {
       $this->status = FALSE;
     }
     else {
       $this->first_day_of_week = $first_day_of_week;
     }
+
     return $this;
   }
 
@@ -237,6 +242,7 @@ class LoftCalendar implements LoftCalendarInterface {
         unset($array[$key]);
       }
     }
+
     return $array;
   }
 
@@ -309,6 +315,7 @@ class LoftCalendar implements LoftCalendarInterface {
         array_push($header, $last);
       }
     }
+
     return $header;
   }
 
@@ -324,9 +331,12 @@ class LoftCalendar implements LoftCalendarInterface {
       ksort($this->calendar[$key]);
     }
     uksort($this->calendar, function ($a, $b) {
-      if ($a == $b) return 0;
+      if ($a == $b) {
+        return 0;
+      }
       $a = strtotime($a . "-1");
       $b = strtotime($b . "-1");
+
       return $a < $b ? -1 : 1;
     });
   }
@@ -407,11 +417,12 @@ class LoftCalendar implements LoftCalendarInterface {
       $day_keys = array_keys($this->children($this->calendar[$year_month]));
       foreach ($day_keys as $day) {
         if ($extra ||
-            !$this->calendar[$year_month][$day]['#extra']) {
+          !$this->calendar[$year_month][$day]['#extra']) {
           $this->add($year_month . '-' . $day, $event, $properties);
         }
       }
     }
+
     return $this;
   }
 
@@ -425,7 +436,8 @@ class LoftCalendar implements LoftCalendarInterface {
     // Adjust from left (earlier)
     $year_month = reset($month_keys);
     $month = $this->calendar[$year_month];
-    $day = reset(array_keys($this->children($month)));
+    $month_keys = array_keys($this->children($month));
+    $day = reset($month_keys);
 
     // Try to add up to seven days to the left to fill out a week
     for ($count = 0; $count < 7; ++$count) {
@@ -456,7 +468,8 @@ class LoftCalendar implements LoftCalendarInterface {
     $parsed = array();
     $finished = FALSE;
     // reset because this is in reverse order
-    $day = reset(array_keys($this->children($month)));
+    $days = array_keys($this->children($month));
+    $day = reset($days);
     for ($count = 0; $count < 7; ++$count) {
       if (empty($parsed)) {
         $parsed = date_parse($year_month . '-' . $day);
@@ -508,6 +521,7 @@ class LoftCalendar implements LoftCalendarInterface {
     }
 
     $this->sort();
+
     return $this;
   }
 
@@ -518,6 +532,7 @@ class LoftCalendar implements LoftCalendarInterface {
 
     // Adjust for any data that was added
     $this->adjust();
+
     return $this->calendar;
   }
 
@@ -528,6 +543,7 @@ class LoftCalendar implements LoftCalendarInterface {
     $new = clone $this;
     $new->calendar = array($year_month => $new->calendar[$year_month]);
     $new->adjust();
+
     return $new;
   }
 }
